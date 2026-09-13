@@ -1,6 +1,6 @@
 {
   "name": "sort-by-rating",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Browser extension that sorts Amazon, Flipkart, Meesho and Myntra results by ratings and review counts.",
   "type": "module",
