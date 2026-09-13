@@ -21,6 +21,12 @@
   var activeTabId = null;
   var supported = false;
 
+  var SITE_LABELS = { amazon: 'Amazon', flipkart: 'Flipkart', meesho: 'Meesho', myntra: 'Myntra' };
+
+  function siteLabel(site) {
+    return SITE_LABELS[site] || 'This site';
+  }
+
   function setStatus(text, kind) {
     els.status.textContent = text;
     els.status.className = 'status' + (kind ? ' ' + kind : '');
@@ -100,7 +106,7 @@
         return;
       }
       setStatus(
-        (resp.site === 'amazon' ? 'Amazon' : 'Flipkart') + ' — ' +
+        siteLabel(resp.site) + ' — ' +
         resp.count + ' products found' +
         (resp.sorted ? ', ' + resp.sorted + ' re-ordered.' : '.')
       );
@@ -111,12 +117,12 @@
     send({ channel: 'sbr', action: 'status' }, function (resp) {
       if (!resp) {
         setEnabled(false);
-        setStatus('Open an Amazon or Flipkart results page to use this extension.', 'warn');
+        setStatus('Open a supported results page (Amazon, Flipkart, Meesho or Myntra) to use this extension.', 'warn');
         return;
       }
       setEnabled(true);
       setStatus(
-        (resp.site === 'amazon' ? 'Amazon' : 'Flipkart') + ' — ' +
+        siteLabel(resp.site) + ' — ' +
         resp.count + ' products detected on this page.'
       );
     });

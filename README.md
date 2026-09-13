@@ -1,8 +1,8 @@
-# Sort by Rating — Amazon & Flipkart
+# Sort by Rating — Amazon, Flipkart, Meesho & Myntra
 
-A small browser extension that re-orders the products on an Amazon or Flipkart
-results page so you can see the **most rated** or **highest rated** items first,
-instead of whatever order the site decided on.
+A small browser extension that re-orders the products on an Amazon, Flipkart,
+Meesho or Myntra results page so you can see the **most rated** or **highest
+rated** items first, instead of whatever order the site decided on.
 
 Most shopping sites only sort by relevance, price or "featured". Review count —
 arguably the strongest signal that a product is actually good — is not a sort
@@ -28,16 +28,18 @@ option. This extension adds it.
 | --- | --- |
 | Amazon | Search results, category pages, best-seller lists |
 | Flipkart | Search results, category pages |
+| Meesho | Search results, category / listing pages |
+| Myntra | Search results, category pages |
 
 Amazon storefronts supported: `.com`, `.in`, `.co.uk`, `.de`, `.fr`, `.it`,
 `.es`, `.ca`, `.com.au`, `.com.br`, `.com.mx`, `.co.jp`, `.nl`, `.se`, `.pl`,
-`.sg`, `.ae`, `.sa`, `.com.tr`, `.eg`, `.com.be`.
+`.sg`, `.ae`, `.sa`, `.com.tr`, `.eg`, `.com.be`, `.ie`.
 
 ## Install
 
 ### Chrome, Edge, Brave, Opera, Vivaldi (any Chromium browser)
 
-1. Download `sort-by-rating-chromium-v1.0.0.zip` from the
+1. Download `sort-by-rating-chromium-v1.1.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`, …).
 3. Turn on **Developer mode**.
@@ -45,7 +47,7 @@ Amazon storefronts supported: `.com`, `.in`, `.co.uk`, `.de`, `.fr`, `.it`,
 
 ### Firefox desktop
 
-1. Download `sort-by-rating-firefox-v1.0.0.zip` from the
+1. Download `sort-by-rating-firefox-v1.1.0.zip` from the
    [latest release](../../releases/latest).
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click **Load Temporary Add-on…** and pick the zip.
@@ -91,11 +93,15 @@ There is no background worker and no server. A content script runs on the
 supported shopping sites and:
 
 1. Finds the product cards (Amazon: `div[data-component-type="s-search-result"]`;
-   Flipkart: `div[data-id^="ITM"]`) and reads the star rating and the ratings /
+   Flipkart: `div[data-id]`, lifted to the outer sibling wrapper;
+   Myntra: `li.product-base`; Meesho: product links `a[href*="/p/"]`, lifted
+   to the per-product subtree) and reads the star rating and the ratings /
    reviews count from each one.
 2. Groups the cards by their parent element and sorts only within that parent.
-   The cards are swapped into each other's original slots, so ads, banners,
-   section headings and other non-product siblings stay exactly where they were.
+   On Flipkart each product is nested in single-child wrappers, so the script
+   climbs to the outer sibling before sorting. The cards are swapped into
+   each other's original slots, so ads, banners, section headings and other
+   non-product siblings stay exactly where they were.
 3. Remembers each card's original position, which powers **Default order** and
    stable tie-breaking. A `MutationObserver` re-applies the sort when new
    products load, and skips the DOM write entirely when the order is unchanged,

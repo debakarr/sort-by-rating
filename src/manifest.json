@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Sort by Rating — Amazon & Flipkart",
-  "version": "1.0.0",
-  "description": "Sort Amazon and Flipkart results by number of ratings/reviews or by star rating, instead of the site's default order.",
+  "name": "Sort by Rating — Amazon, Flipkart, Meesho & Myntra",
+  "version": "1.1.0",
+  "description": "Sort Amazon, Flipkart, Meesho and Myntra results by number of ratings/reviews or by star rating, instead of the site's default order.",
   "permissions": ["storage"],
   "action": {
     "default_title": "Sort by Rating",
@@ -44,7 +44,10 @@
         "*://*.amazon.com.tr/*",
         "*://*.amazon.eg/*",
         "*://*.amazon.com.be/*",
-        "*://*.flipkart.com/*"
+        "*://*.amazon.ie/*",
+        "*://*.flipkart.com/*",
+        "*://*.meesho.com/*",
+        "*://*.myntra.com/*"
       ],
       "js": ["content/content.js"],
       "css": ["content/content.css"],

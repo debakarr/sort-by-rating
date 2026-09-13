@@ -1,14 +1,14 @@
 {
   "name": "sort-by-rating",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Browser extension that sorts Amazon and Flipkart results by ratings and review counts.",
+  "description": "Browser extension that sorts Amazon, Flipkart, Meesho and Myntra results by ratings and review counts.",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "icons": "node tools/make-icons.mjs",
     "build": "node build.mjs",
-    "test": "node --test tests/",
+    "test": "node --test tests/*.mjs",
     "all": "npm run icons && npm run build && npm test"
   },
   "devDependencies": {

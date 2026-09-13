@@ -289,6 +289,184 @@ test('amazon: a star rating in the reviews aria-label is not read as the count',
   assert.deepEqual(orderOf(window, AMAZON_SEL), ['Q2', 'P1']);
 });
 
+/* --------------------------------- regression: live Flipkart markup 2024+ */
+
+function flipkartLiveCard(id, rating, countText, extraSpecs) {
+  const badge = rating == null ? '' : `<span class="CjyrHS" id="productRating_${id}"><div class="MKiFS6">${rating}</div></span>`;
+  const count = countText == null ? '' : `<span class="PvbNMB"><span><span>${countText} Ratings&nbsp;</span><span>&amp;</span><span>&nbsp;100 Reviews</span></span></span>`;
+  return `<div class="lvJbLV col-12-12"><div class="nZIRY7"><div data-id="${id}" style="width:100%">` +
+    `<div class="RG5Slk">Product ${id}</div><div class="a7saXW">${badge}${count}</div>` +
+    `<div class="CMXw7N"><ul><li>256 GB ROM</li><li>${extraSpecs || '16.0 cm Display'}</li></ul></div>` +
+    `</div></div></div>`;
+}
+
+const FLIPKART_LIVE_BODY = `<div class="QSCKDh dLgFEE">` +
+  `<div class="QSCKDh eRsYMo col-12-12">header</div>` +
+  flipkartLiveCard('MOBAAA', '4.6', '26,324', 'Apple One (1) Year Limited Warranty') +
+  flipkartLiveCard('MOBBBB', '4', '1,12,928', '6.75 inch Display') +
+  flipkartLiveCard('MOBCCC', '3.8', '2,48,263', '5000 mAh Battery') +
+  `</div>`;
+
+const FLIPKART_LIVE_SEL = 'div[data-id]';
+
+test('flipkart live: finds category-prefixed ids inside nested wrappers', async () => {
+  const { send } = await boot('https://www.flipkart.com/search?q=phones', FLIPKART_LIVE_BODY);
+  const status = send({ channel: 'sbr', action: 'status' });
+  assert.equal(status.site, 'flipkart');
+  assert.equal(status.count, 3);
+});
+
+test('flipkart live: sorts nested wrappers by count, header stays first', async () => {
+  const { window, send } = await boot('https://www.flipkart.com/search?q=phones', FLIPKART_LIVE_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  assert.deepEqual(orderOf(window, FLIPKART_LIVE_SEL), ['MOBCCC', 'MOBBBB', 'MOBAAA']);
+  const container = window.document.querySelector('.QSCKDh.dLgFEE');
+  assert.match(container.children[0].className, /eRsYMo/);
+});
+
+test('flipkart live: integer rating badge parses and warranty (1) is not a count', async () => {
+  const body = `<div class="QSCKDh dLgFEE">` +
+    flipkartLiveCard('MOBRATED', '4', '5,170', '6 GB RAM') +
+    `<div class="lvJbLV col-12-12"><div class="nZIRY7"><div data-id="MOBUNRATED" style="width:100%">` +
+    `<div class="RG5Slk">Unrated</div><div class="CMXw7N"><ul><li>Apple One (1) Year Limited Warranty</li></ul></div>` +
+    `</div></div></div></div>`;
+  const { window, send } = await boot('https://www.flipkart.com/search?q=phones', body);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  assert.deepEqual(orderOf(window, FLIPKART_LIVE_SEL), ['MOBRATED', 'MOBUNRATED']);
+  send({ channel: 'sbr', action: 'sort', mode: 'rating-desc' });
+  assert.deepEqual(orderOf(window, FLIPKART_LIVE_SEL), ['MOBRATED', 'MOBUNRATED']);
+});
+
+/* ---------------------------------- regression: live Amazon markup 2024+ */
+
+function amazonLiveCard(asin, rating, linkText, aria, extra) {
+  const stars = rating == null ? '' : `<span class="a-icon-alt">${rating} out of 5 stars</span>`;
+  const link = linkText == null ? '' :
+    `<a class="a-link-normal" href="/gp/customerReviews/${asin}" aria-label="${aria}"><span>${linkText}</span></a>`;
+  // New markup reuses .s-underline-text for the title link (contains prices).
+  const titleLink = `<a class="a-link-normal s-underline-text" href="/dp/${asin}">Product ${asin} ₹8,988 M.R.P: ₹15,999</a>`;
+  return `<div data-component-type="s-search-result" data-asin="${asin}">${titleLink}${stars}${link}${extra || ''}</div>`;
+}
+
+test('amazon live: parenthesized and k-suffixed counts sort, unrated sinks', async () => {
+  const body = `<div class="s-main-slot">` +
+    amazonLiveCard('U0', null, null, null) +
+    amazonLiveCard('A1', '4.1 out of 5 stars', '(605)', '605 ratings') +
+    amazonLiveCard('B2', '4.2 out of 5 stars', '(2.3K)', '2,365 ratings') +
+    `</div>`;
+  const { window, send } = await boot('https://www.amazon.in/s?k=phones', body);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  // B2 (2365) > A1 (605) > U0 (unrated, price link must not count as 8988).
+  assert.deepEqual(orderOf(window, AMAZON_SEL), ['B2', 'A1', 'U0']);
+});
+
+test('amazon live: bare star rating is never read as a count', async () => {
+  const body = `<div class="s-main-slot">` +
+    `<div data-component-type="s-search-result" data-asin="P1"><span class="a-icon-alt">4.9 out of 5 stars</span><span>4.9</span></div>` +
+    amazonLiveCard('Q2', '4.1 out of 5 stars', '(90)', '90 ratings') +
+    `</div>`;
+  const { window, send } = await boot('https://www.amazon.in/s?k=phones', body);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  assert.deepEqual(orderOf(window, AMAZON_SEL), ['Q2', 'P1']);
+});
+
+/* ------------------------------------------------- Myntra fixtures/tests */
+
+function myntraCard(id, rating, countText) {
+  const ratings = rating == null
+    ? ''
+    : `<div class="product-ratingsContainer"><span>${rating}</span><span>★</span><span>|</span><span>${countText}</span></div>`;
+  return `<li class="product-base" data-id="${id}">` +
+    `<div class="product-productMetaInfo"><h4 class="product-product">Tee ${id}</h4>` +
+    `${ratings}` +
+    `<div class="product-price"><span class="product-discountedPrice">Rs. 499</span><span class="product-strike">Rs. 1,499</span></div>` +
+    `</div></li>`;
+}
+
+const MYNTRA_BODY = `<ul class="results-base">` +
+  myntraCard('M1', '4.2', '1.2k') +
+  myntraCard('M2', '4.8', '90') +
+  `<li class="ad-slot">SEP</li>` +
+  myntraCard('M3', '3.9', '15.3k') +
+  myntraCard('M4', null, null) +
+  `</ul>`;
+
+const MYNTRA_SEL = 'li.product-base';
+
+test('myntra: status reports site and product count', async () => {
+  const { send } = await boot('https://www.myntra.com/men-tshirts', MYNTRA_BODY);
+  const status = send({ channel: 'sbr', action: 'status' });
+  assert.equal(status.site, 'myntra');
+  assert.equal(status.count, 4);
+});
+
+test('myntra: sorts by number of reviews (most rated first)', async () => {
+  const { window, send } = await boot('https://www.myntra.com/men-tshirts', MYNTRA_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  // M3 15.3k > M1 1.2k > M2 90 > M4 unrated (Rs. prices are not counts).
+  assert.deepEqual(orderOf(window, MYNTRA_SEL), ['M3', 'M1', 'M2', 'M4']);
+});
+
+test('myntra: sorts by highest rating, unrated sinks', async () => {
+  const { window, send } = await boot('https://www.myntra.com/men-tshirts', MYNTRA_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'rating-desc' });
+  assert.deepEqual(orderOf(window, MYNTRA_SEL), ['M2', 'M1', 'M3', 'M4']);
+});
+
+test('myntra: default order restores the original sequence', async () => {
+  const { window, send } = await boot('https://www.myntra.com/men-tshirts', MYNTRA_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  send({ channel: 'sbr', action: 'sort', mode: 'default' });
+  assert.deepEqual(orderOf(window, MYNTRA_SEL), ['M1', 'M2', 'M3', 'M4']);
+});
+
+/* ------------------------------------------------- Meesho fixtures/tests */
+
+function meeshoCard(id, pid, rating, countText) {
+  const badge = rating == null ? '' : `<span class="pill">${rating} ★</span>`;
+  const count = countText == null ? '' : `<span class="rcount">(${countText})</span>`;
+  return `<div class="cardwrap" data-id="${id}">` +
+    `<a href="/fancy-kurti/p/${pid}"><div><span>Kurti ${id}</span>${badge}${count}` +
+    `<span>₹499</span></div></a></div>`;
+}
+
+const MEESHO_BODY = `<div class="plp-grid">` +
+  meeshoCard('S1', 'aaa', '4.1', '1,200') +
+  meeshoCard('S2', 'bbb', '4.8', '90') +
+  `<div class="ad-slot">SEP</div>` +
+  meeshoCard('S3', 'ccc', '3.9', '15,000') +
+  meeshoCard('S4', 'ddd', null, null) +
+  `</div>`;
+
+const MEESHO_SEL = 'div.cardwrap';
+
+test('meesho: status reports site and product count', async () => {
+  const { send } = await boot('https://www.meesho.com/search?q=kurti', MEESHO_BODY);
+  const status = send({ channel: 'sbr', action: 'status' });
+  assert.equal(status.site, 'meesho');
+  assert.equal(status.count, 4);
+});
+
+test('meesho: sorts by number of reviews (most rated first)', async () => {
+  const { window, send } = await boot('https://www.meesho.com/search?q=kurti', MEESHO_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  // S3 15,000 > S1 1,200 > S2 90 > S4 unrated (₹ price is not a count).
+  assert.deepEqual(orderOf(window, MEESHO_SEL), ['S3', 'S1', 'S2', 'S4']);
+});
+
+test('meesho: sorts by highest rating, unrated sinks', async () => {
+  const { window, send } = await boot('https://www.meesho.com/search?q=kurti', MEESHO_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'rating-desc' });
+  assert.deepEqual(orderOf(window, MEESHO_SEL), ['S2', 'S1', 'S3', 'S4']);
+});
+
+test('meesho: default order restores the original sequence', async () => {
+  const { window, send } = await boot('https://www.meesho.com/search?q=kurti', MEESHO_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  send({ channel: 'sbr', action: 'sort', mode: 'default' });
+  assert.deepEqual(orderOf(window, MEESHO_SEL), ['S1', 'S2', 'S3', 'S4']);
+});
+
 test('unsupported hosts are ignored', async () => {
   const { send } = await boot('https://example.com/', '<div>nothing</div>');
   assert.equal(send({ channel: 'sbr', action: 'status' }), null);

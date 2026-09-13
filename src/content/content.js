@@ -1,8 +1,8 @@
 /* Sort by Rating — content script.
  *
- * Runs on Amazon and Flipkart listing pages (search results, category pages,
- * best-seller lists). Re-orders the product cards that are already on the page
- * by rating or by number of ratings/reviews.
+ * Runs on Amazon, Flipkart, Meesho and Myntra listing pages (search results,
+ * category pages, best-seller lists). Re-orders the product cards that are
+ * already on the page by rating or by number of ratings/reviews.
  *
  * Design notes:
  *  - No background worker is used, so a single MV3 manifest works on both
@@ -23,6 +23,8 @@
   var HOST = location.hostname.replace(/^www\./, '');
   var SITE = /(^|\.)amazon\./.test(HOST) ? 'amazon'
            : /(^|\.)flipkart\.com$/i.test(HOST) ? 'flipkart'
+           : /(^|\.)meesho\.com$/i.test(HOST) ? 'meesho'
+           : /(^|\.)myntra\.com$/i.test(HOST) ? 'myntra'
            : null;
   if (!SITE) return;
 
@@ -77,7 +79,8 @@
   /**
    * Extract a review count from a short string. Prefers an explicit
    * "N ratings" / "N reviews" phrase, and only falls back to a bare number when
-   * the whole string is one. Crucially it never treats a leading star rating
+   * the whole string is one (parentheses and k/m suffixes allowed, e.g.
+   * "(605)" or "2.3K"). Crucially it never treats a leading star rating
    * (e.g. "4.3 out of 5 stars 2,345 ratings") as the count.
    */
   function countFromText(raw) {
@@ -85,8 +88,12 @@
     var t = String(raw).replace(/\u00a0/g, ' ').trim();
     var m = t.match(/([\d.,]+)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
     if (m) return parseCount(m[1]);
-    if (/^\d{1,3}(?:,\d{3})*$/.test(t)) return parseCount(t);
-    return NaN;
+    var bare = t.replace(/^[(\[]\s*/, '').replace(/\s*[)\]]$/, '').trim();
+    if (!/^\d[\d.,]*\s*[kKmM]?$/.test(bare)) return NaN;
+    // A bare "4.3" / "4" is a star rating, not a count. Only accept it when it
+    // looks like a real count (comma, k/m suffix, or a value > 5).
+    if (/^[1-5](?:\.\d+)?$/.test(bare)) return NaN;
+    return parseCount(bare);
   }
 
   /** Collapse "missing" values (NaN) to -1 so comparisons behave predictably. */
@@ -104,10 +111,29 @@
 
   function pureNumber(el) {
     // A small element whose whole text is a number, and which is not a price.
-    var t = textOf(el);
-    if (!/^\d{1,3}(?:,\d{3})*$/.test(t)) return NaN;
-    if (el.closest && el.closest('.a-price, .a-offscreen, [class*="price"], [class*="Price"]')) return NaN;
+    // Parentheses/comma/k-m suffixes are required (e.g. "(605)", "8,988",
+    // "2.3K") so spec numbers like "5000 mAh" or "64 GB" never match. Bare
+    // star ratings ("4.3" / "4") and prices ("Rs. 499", "₹1,299") are
+    // explicitly excluded.
+    var raw = textOf(el);
+    if (!/[,\(\)kKmM]/.test(raw)) return NaN;
+    if (isPriceEl(el)) return NaN;
+    var t = raw.replace(/^[(\[]\s*/, '').replace(/\s*[)\]]$/, '').trim();
+    if (!/^\d[\d.,]*\s*[kKmM]?$/.test(t)) return NaN;
+    if (/^[1-5](?:\.\d+)?$/.test(t)) return NaN;
     return parseCount(t);
+  }
+
+  /**
+   * True when the element is, or sits inside, a price block — or its text is
+   * currency-denominated. Counts never contain currency markers, so this is a
+   * safe cross-site guard (Amazon .a-price, Myntra Rs./product-price,
+   * Meesho ₹ prices in hashed classes).
+   */
+  function isPriceEl(el) {
+    if (el && el.closest && el.closest('.a-price, .a-offscreen, [class*="price"], [class*="Price"], [class*="mrp"], [class*="MRP"], [class*="discount"], [class*="Discount"], [class*="strike"], [class*="Strike"]')) return true;
+    var t = textOf(el);
+    return /[₹$€£]/.test(t) || /(^|\s)Rs\.?\s*\d/i.test(t);
   }
 
   /* ------------------------------------------------------- Amazon extraction */
@@ -148,12 +174,17 @@
     }
 
     var underline = card.querySelector('span.s-underline-text, .s-underline-text');
-    if (underline) { var v3 = parseCount(textOf(underline)); if (!isNaN(v3)) return v3; }
+    if (underline) {
+      // NB: newer Amazon markup reuses .s-underline-text for the product
+      // title link (which contains prices), so only accept count-like text.
+      var v3 = countFromText(textOf(underline));
+      if (!isNaN(v3) && v3 > 0) return v3;
+    }
 
     var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
-    var m2 = txt.match(/([\d,]+)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
+    var m2 = txt.match(/([\d.,]+\s*[kKmM]?)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
     if (m2) { var v4 = parseCount(m2[1]); if (!isNaN(v4)) return v4; }
-    var m3 = txt.match(/(?:out of\s*5\s*stars)\s*([\d,]+)/i);
+    var m3 = txt.match(/(?:out of\s*5\s*stars)\s*\(?\s*([\d.,]+\s*[kKmM]?)/i);
     if (m3) { var v5 = parseCount(m3[1]); if (!isNaN(v5)) return v5; }
 
     // Best-seller style pages show a bare number next to the stars.
@@ -168,46 +199,192 @@
   /* ----------------------------------------------------- Flipkart extraction */
 
   function flipkartRating(card) {
-    // The rating badge is the smallest element whose text is exactly "4.3".
+    // Current layout (2024+): <div class="MKiFS6">4.6<img …></div> inside
+    // <span class="CjyrHS" id="productRating_…">. Prefer it directly — it is
+    // exact and avoids matching spec numbers elsewhere in the card.
+    var badge = card.querySelector('.MKiFS6, .CjyrHS, [id^="productRating"]');
+    if (badge) {
+      var first = card.querySelector('.MKiFS6');
+      var v0 = parseRating(textOf(first || badge).split(/\s+/)[0]);
+      if (!isNaN(v0)) return v0;
+    }
+
+    // Legacy layout: the rating badge is the smallest element whose text is
+    // exactly "4.3" (or an integer "4" — some badges have no decimal).
+    var RATING_RE = /^[1-5](?:\.\d)?$/;
     var best = null;
     var nodes = qsa('div, span', card);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      if (!/^[1-5]\.\d$/.test(textOf(el))) continue;
-      if (qsa('div, span', el).some(function (c) { return /^[1-5]\.\d$/.test(textOf(c)); })) continue;
+      if (!RATING_RE.test(textOf(el))) continue;
+      if (qsa('div, span', el).some(function (c) { return RATING_RE.test(textOf(c)); })) continue;
       best = el; // deepest match wins
     }
     if (best) { var v = parseRating(textOf(best)); if (!isNaN(v)) return v; }
 
-    var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
-    var m = txt.match(/\(?\s*([1-5]\.\d)\s*\)?/);
-    if (m) { var v2 = parseRating(m[1]); if (!isNaN(v2)) return v2; }
     return NaN;
   }
 
   function flipkartCount(card) {
+    // Current layout (2024+): <span class="PvbNMB">26,324 Ratings & 1,912 Reviews</span>.
+    var slot = card.querySelector('.PvbNMB');
+    if (slot) {
+      var sv = countFromText(textOf(slot));
+      if (!isNaN(sv) && sv > 0) return sv;
+    }
+
     var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
     var m = txt.match(/([\d,]+)\s*Ratings?\b/i) ||
             txt.match(/Ratings?\s*([\d,]+)\b/i);
     if (m) { var v = parseCount(m[1]); if (!isNaN(v)) return v; }
 
-    var m2 = txt.match(/\(([\d,]+)\)/);
-    if (m2) { var v2 = parseCount(m2[1]); if (!isNaN(v2)) return v2; }
-
     // Older layout: "4.3" badge followed by a separate "(1,234)" span.
+    // Scoped to small standalone spans/divs only — never the whole card text,
+    // so spec lines like "Apple One (1) Year Limited Warranty" can't match.
     var nodes = qsa('span, div', card);
     for (var i = 0; i < nodes.length; i++) {
-      var v3 = parseCount(textOf(nodes[i]).replace(/[()]/g, ''));
-      if (!isNaN(v3) && v3 > 0 && /^\(?[\d,]+\)?$/.test(textOf(nodes[i]))) return v3;
+      var t = textOf(nodes[i]);
+      if (!/^\(?[\d,]+\)?$/.test(t)) continue;
+      var v3 = parseCount(t.replace(/[()]/g, ''));
+      if (!isNaN(v3) && v3 > 0) return v3;
+    }
+    return NaN;
+  }
+
+  /* ------------------------------------------------------- Myntra extraction */
+
+  function myntraBox(card) {
+    return card.querySelector && card.querySelector(
+      '.product-ratingsContainer, [class*="ratingsContainer"], [class*="RatingsContainer"]');
+  }
+
+  function myntraRating(card) {
+    // Search/category cards carry "4.3 ★ | 2.1k" in .product-ratingsContainer.
+    var box = myntraBox(card);
+    if (box) {
+      var m = textOf(box).match(/([1-5](?:\.\d+)?)/);
+      if (m) { var v0 = parseRating(m[1]); if (!isNaN(v0)) return v0; }
+    }
+
+    // "4.3 ★" style badge without a ratings container.
+    var badges = qsa('div, span', card);
+    for (var i = 0; i < badges.length; i++) {
+      var t = textOf(badges[i]);
+      if (t.length > 14) continue;
+      var m2 = t.match(/^([1-5](?:\.\d+)?)\s*★/);
+      if (m2) { var v1 = parseRating(m2[1]); if (!isNaN(v1)) return v1; }
+    }
+
+    // Deepest exact-match fallback ("4.3" or integer "4").
+    var RATING_RE = /^[1-5](?:\.\d)?$/;
+    var best = null;
+    var nodes = qsa('div, span', card);
+    for (var j = 0; j < nodes.length; j++) {
+      var el = nodes[j];
+      if (isPriceEl(el)) continue;
+      if (!RATING_RE.test(textOf(el))) continue;
+      if (qsa('div, span', el).some(function (c) { return RATING_RE.test(textOf(c)); })) continue;
+      best = el; // deepest match wins
+    }
+    if (best) { var v = parseRating(textOf(best)); if (!isNaN(v)) return v; }
+    return NaN;
+  }
+
+  function myntraCount(card) {
+    var box = myntraBox(card);
+    if (box) {
+      var t = textOf(box);
+      // The count is the trailing token ("4.3 ★ | 2.1k" -> "2.1k").
+      // A trailing bare "4.3"/"4" means rating-only, not a count.
+      var m = t.match(/\|?\s*([\d.,]+\s*[kKmM]?)\s*$/);
+      if (m && !/^[1-5](?:\.\d+)?$/.test(m[1].trim())) {
+        var v0 = parseCount(m[1]);
+        if (!isNaN(v0) && v0 > 0) return v0;
+      } else if (m) {
+        return NaN; // rating shown but no review count yet
+      }
+    }
+
+    var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
+    var m2 = txt.match(/([\d.,]+\s*[kKmM]?)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
+    if (m2) { var v2 = parseCount(m2[1]); if (!isNaN(v2)) return v2; }
+
+    // Small standalone tokens only ("(1,234)", "2.1k"); prices and star
+    // ratings are excluded via isPriceEl and the rating-like guard.
+    var nodes = qsa('span, div', card);
+    for (var i = 0; i < nodes.length; i++) {
+      var raw = textOf(nodes[i]);
+      if (raw.length > 16 || !/[,\(\)kKmM\|★]/.test(raw)) continue;
+      if (isPriceEl(nodes[i])) continue;
+      var bare = raw.replace(/^[(\[]\s*/, '').replace(/\s*[)\]|★|\s]*$/, '').trim();
+      if (!/^\d[\d.,]*\s*[kKmM]?$/.test(bare)) continue;
+      if (/^[1-5](?:\.\d+)?$/.test(bare)) continue;
+      var v3 = parseCount(bare);
+      if (!isNaN(v3) && v3 > 0) return v3;
+    }
+    return NaN;
+  }
+
+  /* ------------------------------------------------------- Meesho extraction */
+
+  function meeshoRating(card) {
+    // Rating pill reads "4.1 ★". Match small elements starting with a rating
+    // followed by a star, so prices/specs elsewhere in the card can't match.
+    var els = qsa('div, span, p', card);
+    for (var i = 0; i < els.length; i++) {
+      var t = textOf(els[i]);
+      if (!t || t.length > 14 || isPriceEl(els[i])) continue;
+      var m = t.match(/^([1-5](?:\.\d+)?)\s*★/);
+      if (m) { var v = parseRating(m[1]); if (!isNaN(v)) return v; }
+    }
+
+    // Deepest exact-match fallback ("4.1" or integer "4").
+    var RATING_RE = /^[1-5](?:\.\d)?$/;
+    var best = null;
+    var nodes = qsa('div, span, p', card);
+    for (var j = 0; j < nodes.length; j++) {
+      var el = nodes[j];
+      if (isPriceEl(el)) continue;
+      if (!RATING_RE.test(textOf(el))) continue;
+      if (qsa('div, span, p', el).some(function (c) { return RATING_RE.test(textOf(c)); })) continue;
+      best = el; // deepest match wins
+    }
+    if (best) { var v2 = parseRating(textOf(best)); if (!isNaN(v2)) return v2; }
+    return NaN;
+  }
+
+  function meeshoCount(card) {
+    var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
+    var m = txt.match(/([\d.,]+\s*[kKmM]?)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
+    if (m) { var v = parseCount(m[1]); if (!isNaN(v)) return v; }
+
+    // "(12,345)" / "(12k)" style standalone tokens next to the rating pill.
+    // Scoped to small elements only; prices excluded via isPriceEl.
+    var nodes = qsa('span, div, p', card);
+    for (var i = 0; i < nodes.length; i++) {
+      var raw = textOf(nodes[i]);
+      if (!raw || raw.length > 16) continue;
+      if (isPriceEl(nodes[i])) continue;
+      var mm = raw.match(/^\(?\s*([\d,]+(?:\.\d+)?\s*[kKmM]?)\s*\)?$/);
+      if (!mm) continue;
+      if (/^[1-5](?:\.\d+)?$/.test(mm[1].trim())) continue;
+      var v2 = parseCount(mm[1]);
+      if (!isNaN(v2) && v2 > 0) return v2;
     }
     return NaN;
   }
 
   function readRating(card) {
-    return SITE === 'amazon' ? amazonRating(card) : flipkartRating(card);
+    if (SITE === 'amazon') return amazonRating(card);
+    if (SITE === 'flipkart') return flipkartRating(card);
+    if (SITE === 'meesho') return meeshoRating(card);
+    return myntraRating(card);
   }
   function readCount(card) {
-    return SITE === 'amazon' ? amazonCount(card) : flipkartCount(card);
+    if (SITE === 'amazon') return amazonCount(card);
+    if (SITE === 'flipkart') return flipkartCount(card);
+    if (SITE === 'meesho') return meeshoCount(card);
+    return myntraCount(card);
   }
 
   /**
@@ -235,15 +412,83 @@
 
   /* ----------------------------------------------------------- card finding */
 
+  /**
+   * Lift a product node to its sortable slot: climb through single-child
+   * wrappers (Flipkart nests each product as
+   * div[data-id] > div.nZIRY7 > div.lvJbLV, where only the outer wrapper are
+   * siblings). Amazon cards are already siblings, so this is a no-op there.
+   */
+  function slotOf(el) {
+    var depth = 0;
+    while (el && el.parentElement && depth < 4) {
+      var p = el.parentElement;
+      if (p === document.body || p === document.documentElement) break;
+      if (p.children.length !== 1) break;
+      el = p;
+      depth++;
+    }
+    return el;
+  }
+
+  /**
+   * Resolve a Meesho product anchor (href “…/p/<id>”) to its card: climb while
+   * the parent holds only this product's link; the child of a multi-product
+   * parent is the per-product subtree (siblings = sortable slots).
+   */
+  function meeshoCardOf(anchor) {
+    var el = (anchor && anchor.closest) ? (anchor.closest('div') || anchor) : anchor;
+    var depth = 0;
+    while (el && el.parentElement && depth < 6) {
+      var p = el.parentElement;
+      if (p === document.body || p === document.documentElement) break;
+      var links = null;
+      try {
+        links = p.querySelectorAll('a[href*="/p/"]');
+      } catch (e) { break; }
+      if (!links || links.length !== 1) break;
+      el = p;
+      depth++;
+    }
+    return el;
+  }
+
   function getCards() {
     var cards = [];
     if (SITE === 'amazon') {
       cards = qsa('div[data-component-type="s-search-result"]');
       if (cards.length < 2) cards = qsa('#zg-ordered-list > li, div#gridItemRoot, div.zg-grid-general-faceout');
       if (cards.length < 2) cards = qsa('.s-result-item[data-asin]');
+    } else if (SITE === 'myntra') {
+      // Stable for years: ul.results-base > li.product-base, rating in
+      // .product-ratingsContainer ("4.3 ★ | 2.1k").
+      cards = qsa('li.product-base, div.product-base');
+      if (cards.length < 2) cards = qsa('.product-base');
+      if (cards.length < 2) {
+        var res = document.querySelector('ul.results-base, [class*="results"]');
+        if (res) cards = qsa('li', res).filter(function (li) {
+          return li.querySelector('a[href*="/buy"], a[href*="/"]');
+        });
+      }
+      cards = cards.map(slotOf);
+      cards = cards.filter(function (el, i) { return cards.indexOf(el) === i; });
+    } else if (SITE === 'meesho') {
+      // Meesho uses hashed styled-component classes, so anchor on the stable
+      // product URL (…/p/<id>) and climb to the per-product subtree: the
+      // deepest ancestor whose parent mixes several product links.
+      var anchors = qsa('a[href*="/p/"]');
+      cards = anchors.map(meeshoCardOf).filter(Boolean);
+      cards = cards.filter(function (el, i) { return cards.indexOf(el) === i; });
     } else {
-      // Flipkart product ids always start with "ITM".
-      cards = qsa('div[data-id^="ITM"]');
+      // Flipkart used data-id="ITM…" until ~2024; current ids are category
+      // prefixed (e.g. data-id="MOBHFN6Y…"). Match any non-empty data-id and
+      // lift to the outer sibling wrapper so re-ordering works.
+      cards = qsa('div[data-id]').filter(function (el) {
+        var id = el.getAttribute('data-id');
+        return id && id.trim().length > 0;
+      });
+      cards = cards.map(slotOf);
+      // De-duplicate in case nesting ever yields the same slot twice.
+      cards = cards.filter(function (el, i) { return cards.indexOf(el) === i; });
     }
     return outermost(cards);
   }
