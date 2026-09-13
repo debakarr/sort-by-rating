@@ -36,6 +36,7 @@
   var hasSorted = false;    // true once the user opted into sorting this page
   var observer = null;
   var debounceTimer = null;
+  var valueCache = new WeakMap(); // card -> { rating, count, tries, final }
 
   /* ------------------------------------------------------------------ utils */
 
@@ -73,6 +74,26 @@
     return (v > 0 && v <= 5) ? v : NaN;
   }
 
+  /**
+   * Extract a review count from a short string. Prefers an explicit
+   * "N ratings" / "N reviews" phrase, and only falls back to a bare number when
+   * the whole string is one. Crucially it never treats a leading star rating
+   * (e.g. "4.3 out of 5 stars 2,345 ratings") as the count.
+   */
+  function countFromText(raw) {
+    if (raw == null) return NaN;
+    var t = String(raw).replace(/\u00a0/g, ' ').trim();
+    var m = t.match(/([\d.,]+)\s*(?:global\s+)?(?:ratings?|reviews?)\b/i);
+    if (m) return parseCount(m[1]);
+    if (/^\d{1,3}(?:,\d{3})*$/.test(t)) return parseCount(t);
+    return NaN;
+  }
+
+  /** Collapse "missing" values (NaN) to -1 so comparisons behave predictably. */
+  function norm(v) {
+    return (typeof v === 'number' && isFinite(v) && v > 0) ? v : -1;
+  }
+
   /** Keep only nodes that are not descendants of another node in the list. */
   function outermost(nodes) {
     var arr = nodes.filter(Boolean);
@@ -108,11 +129,14 @@
   }
 
   function amazonCount(card) {
-    // Most reliable: the "N ratings" link / aria-label.
+    // Most reliable: the "N ratings" link. Read the visible count span first
+    // and only consult the aria-label through countFromText, so a label like
+    // "4.3 out of 5 stars" can never be mistaken for a count.
     var link = card.querySelector('a[href*="customerReviews"], a[href*="#customerReviews"]');
     if (link) {
-      var v = parseCount(link.getAttribute('aria-label')) ||
-              parseCount(textOf(link.querySelector('span')) || textOf(link));
+      var v = countFromText(textOf(link.querySelector('span')));
+      if (isNaN(v)) v = countFromText(link.getAttribute('aria-label'));
+      if (isNaN(v)) v = countFromText(textOf(link));
       if (!isNaN(v) && v > 0) return v;
     }
 
@@ -184,6 +208,29 @@
   }
   function readCount(card) {
     return SITE === 'amazon' ? amazonCount(card) : flipkartCount(card);
+  }
+
+  /**
+   * Read a card's rating/count, caching the result so that re-sorting after
+   * every DOM mutation does not repeatedly force layout through innerText.
+   * Cards with no rating are re-read a few times (their rating block may still
+   * be rendering) and then cached as unrated.
+   */
+  function valuesOf(card) {
+    var hit = valueCache.get(card);
+    if (hit && (hit.final || hit.rating >= 0)) return hit;
+
+    var rating = readRating(card);
+    var count = readCount(card);
+    var entry = {
+      rating: rating,
+      count: count,
+      tries: (hit ? hit.tries : 0) + 1,
+      final: false
+    };
+    entry.final = rating >= 0 || entry.tries >= 5;
+    valueCache.set(card, entry);
+    return entry;
   }
 
   /* ----------------------------------------------------------- card finding */
@@ -288,10 +335,11 @@
       groups.forEach(function (list, parent) {
         if (list.length < 2) return;
         var items = list.map(function (card) {
+          var v = valuesOf(card);
           return {
             card: card,
-            rating: readRating(card),
-            count: readCount(card),
+            rating: norm(v.rating),
+            count: norm(v.count),
             order: parseInt(card.getAttribute(ORDER_ATTR), 10) || 0
           };
         });
@@ -406,8 +454,10 @@
   /* ------------------------------------------------------------ persistence */
 
   function loadSettings(cb) {
+    var area = storeArea();
+    if (!area) { cb(); return; }
     try {
-      api.storage.sync.get(SETTINGS_KEY, function (res) {
+      area.get(SETTINGS_KEY, function (res) {
         if (res && res[SETTINGS_KEY]) settings = Object.assign({}, DEFAULTS, res[SETTINGS_KEY]);
         if (typeof cb === 'function') cb();
       });
@@ -416,11 +466,27 @@
     }
   }
 
+  /**
+   * Prefer synced storage, but fall back to local storage. Some Firefox for
+   * Android builds do not expose storage.sync, and we would rather remember
+   * settings on the device than not at all.
+   */
+  function storeArea() {
+    try {
+      if (api.storage && api.storage.sync && typeof api.storage.sync.get === 'function') {
+        return api.storage.sync;
+      }
+    } catch (e) { /* ignore */ }
+    return api.storage ? api.storage.local : null;
+  }
+
   function persist() {
+    var area = storeArea();
+    if (!area) return;
     try {
       var payload = {};
       payload[SETTINGS_KEY] = settings;
-      api.storage.sync.set(payload);
+      area.set(payload);
     } catch (e) { /* ignore */ }
   }
 

@@ -225,6 +225,70 @@ test('flipkart: non-product siblings keep their slot position', async () => {
   assert.equal(kids.length, 6);
 });
 
+/* ------------------------------------------------ regression: unrated cards */
+
+const AMAZON_UNRATED_FIRST_BODY = `<div class="s-main-slot">
+  ${amazonCard('U0', null, null)}
+  ${amazonCard('A1', '4.1', '1,200')}
+  ${amazonCard('C3', '3.9', '15,000')}
+</div>`;
+
+const FLIPKART_UNRATED_FIRST_BODY = `<div class="grid">
+  ${flipkartCard('ITMU', null, null)}
+  ${flipkartCard('ITM1', '4.1', '1,200')}
+  ${flipkartCard('ITM3', '3.9', '15,000')}
+</div>`;
+
+const UNRATED_CASES = [
+  ['reviews-desc', ['C3', 'A1', 'U0']],
+  ['reviews-asc', ['A1', 'C3', 'U0']],
+  ['rating-desc', ['A1', 'C3', 'U0']],
+  ['rating-asc', ['C3', 'A1', 'U0']]
+];
+
+test('amazon: unrated product first is moved to the bottom in every mode', async () => {
+  const { window, send } = await boot('https://www.amazon.in/s?k=phones', AMAZON_UNRATED_FIRST_BODY);
+  for (const [mode, expected] of UNRATED_CASES) {
+    send({ channel: 'sbr', action: 'sort', mode });
+    assert.deepEqual(orderOf(window, AMAZON_SEL), expected, `mode ${mode}`);
+  }
+});
+
+test('flipkart: unrated product first is moved to the bottom in every mode', async () => {
+  const { window, send } = await boot('https://www.flipkart.com/search?q=phones', FLIPKART_UNRATED_FIRST_BODY);
+  const cases = UNRATED_CASES.map(([mode, expected]) =>
+    [mode, expected.map((id) => (id === 'U0' ? 'ITMU' : id.replace('A1', 'ITM1').replace('C3', 'ITM3')))]);
+  for (const [mode, expected] of cases) {
+    send({ channel: 'sbr', action: 'sort', mode });
+    assert.deepEqual(orderOf(window, FLIPKART_SEL), expected, `mode ${mode}`);
+  }
+});
+
+/* ------------------------------------- regression: count vs star aria-label */
+
+// The reviews link carries only an aria-label. The star part of the label must
+// not be mistaken for the review count.
+function amazonCardAriaOnly(asin, rating, count) {
+  return `<div data-component-type="s-search-result" data-asin="${asin}">
+    <a class="a-link-normal" href="/gp/customerReviews/${asin}"
+       aria-label="${rating} out of 5 stars ${count} ratings"></a>
+    <i class="a-icon a-icon-star-small"><span class="a-icon-alt">${rating} out of 5 stars</span></i>
+  </div>`;
+}
+
+const AMAZON_ARIA_BODY = `<div class="s-main-slot">
+  ${amazonCardAriaOnly('P1', '4.9', '90')}
+  ${amazonCardAriaOnly('Q2', '4.1', '5,000')}
+</div>`;
+
+test('amazon: a star rating in the reviews aria-label is not read as the count', async () => {
+  const { window, send } = await boot('https://www.amazon.in/s?k=phones', AMAZON_ARIA_BODY);
+  send({ channel: 'sbr', action: 'sort', mode: 'reviews-desc' });
+  // Q2 has 5,000 ratings and P1 only 90, so Q2 must come first. If the "4.9" /
+  // "4.1" were parsed as counts the order would be reversed.
+  assert.deepEqual(orderOf(window, AMAZON_SEL), ['Q2', 'P1']);
+});
+
 test('unsupported hosts are ignored', async () => {
   const { send } = await boot('https://example.com/', '<div>nothing</div>');
   assert.equal(send({ channel: 'sbr', action: 'status' }), null);

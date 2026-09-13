@@ -31,9 +31,20 @@
     [els.mode, els.rescan, els.auto, els.bar].forEach(function (el) { el.disabled = !on; });
   }
 
-  function loadSettings(cb) {
+  function storeArea() {
     try {
-      api.storage.sync.get(SETTINGS_KEY, function (res) {
+      if (api.storage && api.storage.sync && typeof api.storage.sync.get === 'function') {
+        return api.storage.sync;
+      }
+    } catch (e) { /* ignore */ }
+    return api.storage ? api.storage.local : null;
+  }
+
+  function loadSettings(cb) {
+    var area = storeArea();
+    if (!area) { cb(); return; }
+    try {
+      area.get(SETTINGS_KEY, function (res) {
         if (res && res[SETTINGS_KEY]) settings = Object.assign({}, DEFAULTS, res[SETTINGS_KEY]);
         cb();
       });
@@ -43,10 +54,12 @@
   }
 
   function persist() {
+    var area = storeArea();
+    if (!area) return;
     try {
       var payload = {};
       payload[SETTINGS_KEY] = settings;
-      api.storage.sync.set(payload);
+      area.set(payload);
     } catch (e) { /* ignore */ }
   }
 
