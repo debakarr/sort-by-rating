@@ -79,7 +79,7 @@ async function boot(url, bodyHtml, settings) {
 
 function orderOf(window, selector) {
   return Array.from(window.document.querySelectorAll(selector))
-    .map((el) => el.getAttribute('data-asin') || el.getAttribute('data-id'));
+    .map((el) => el.getAttribute('data-id') || el.getAttribute('data-asin'));
 }
 
 /* ------------------------------------------------------------- fixtures */
@@ -108,11 +108,12 @@ const AMAZON_BODY = `<div class="s-main-slot">
 </div>`;
 
 function flipkartCard(id, rating, count) {
-  const badge = rating == null ? '' : `<div class="_3LWZlK">${rating}</div>`;
-  const reviews = count == null ? '' : `<span class="_2_R_DZ">${count} Ratings &amp; 30 Reviews</span>`;
+  const badge = rating == null ? '' : `<div class="MKiFS6">${rating}</div>`;
+  const countSpan = count == null ? '' : `<span class="PvbNMB">${count} Ratings &amp; 30 Reviews</span>`;
+  const ratingSlot = (badge || countSpan) ? `<div class="a7saXW">${badge}${countSpan}</div>` : '';
   return `<div data-id="${id}">
     <div class="title">Product ${id}</div>
-    ${badge}${reviews}
+    ${ratingSlot}
     <div class="_30jeq3">&#8377;1,234</div>
   </div>`;
 }
@@ -293,7 +294,7 @@ test('amazon: a star rating in the reviews aria-label is not read as the count',
 
 function flipkartLiveCard(id, rating, countText, extraSpecs) {
   const badge = rating == null ? '' : `<span class="CjyrHS" id="productRating_${id}"><div class="MKiFS6">${rating}</div></span>`;
-  const count = countText == null ? '' : `<span class="PvbNMB"><span><span>${countText} Ratings&nbsp;</span><span>&amp;</span><span>&nbsp;100 Reviews</span></span></span>`;
+  const count = countText == null ? '' : `<span class="PvbNMB"> <span><span>${countText} Ratings&nbsp;</span><span>&amp;</span><span>&nbsp;100 Reviews</span></span></span>`;
   return `<div class="lvJbLV col-12-12"><div class="nZIRY7"><div data-id="${id}" style="width:100%">` +
     `<div class="RG5Slk">Product ${id}</div><div class="a7saXW">${badge}${count}</div>` +
     `<div class="CMXw7N"><ul><li>256 GB ROM</li><li>${extraSpecs || '16.0 cm Display'}</li></ul></div>` +
@@ -302,9 +303,9 @@ function flipkartLiveCard(id, rating, countText, extraSpecs) {
 
 const FLIPKART_LIVE_BODY = `<div class="QSCKDh dLgFEE">` +
   `<div class="QSCKDh eRsYMo col-12-12">header</div>` +
-  flipkartLiveCard('MOBAAA', '4.6', '26,324', 'Apple One (1) Year Limited Warranty') +
-  flipkartLiveCard('MOBBBB', '4', '1,12,928', '6.75 inch Display') +
-  flipkartLiveCard('MOBCCC', '3.8', '2,48,263', '5000 mAh Battery') +
+  flipkartLiveCard('MOBAAA', '4.6', ',26,324', 'Apple One (1) Year Limited Warranty') +
+  flipkartLiveCard('MOBBBB', '4', ',1,12,928', '6.75 inch Display') +
+  flipkartLiveCard('MOBCCC', '3.8', ',2,48,263', '5000 mAh Battery') +
   `</div>`;
 
 const FLIPKART_LIVE_SEL = 'div[data-id]';

@@ -199,53 +199,56 @@
   /* ----------------------------------------------------- Flipkart extraction */
 
   function flipkartRating(card) {
-    // Current layout (2024+): <div class="MKiFS6">4.6<img …></div> inside
-    // <span class="CjyrHS" id="productRating_…">. Prefer it directly — it is
-    // exact and avoids matching spec numbers elsewhere in the card.
-    var badge = card.querySelector('.MKiFS6, .CjyrHS, [id^="productRating"]');
-    if (badge) {
-      var first = card.querySelector('.MKiFS6');
-      var v0 = parseRating(textOf(first || badge).split(/\s+/)[0]);
-      if (!isNaN(v0)) return v0;
+    // Merge rating+count to numeric-only tokens via regex, preventing counts
+    // like "26,324" from being mistaken for ratings. Accept both "4.6" and
+    // integer "4" forms; the pattern anchors at word boundaries.
+    var ratingSlot = card.querySelector('[id^="productRating"]') || card.querySelector('.a7saXW');
+    if (ratingSlot) {
+      var m = textOf(ratingSlot).match(/(?:^|\s)([1-5](?:\.\d+)?)(?=\s*(?:$|\d|\s|&))/);
+      if (m) { var v0 = parseRating(m[1]); if (!isNaN(v0)) return v0; }
     }
 
-    // Legacy layout: the rating badge is the smallest element whose text is
-    // exactly "4.3" (or an integer "4" — some badges have no decimal).
+    // Deepest exact-match fallback ("4.3" / "4") — must not be a price.
     var RATING_RE = /^[1-5](?:\.\d)?$/;
     var best = null;
     var nodes = qsa('div, span', card);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
+      if (isPriceEl(el)) continue;
       if (!RATING_RE.test(textOf(el))) continue;
-      if (qsa('div, span', el).some(function (c) { return RATING_RE.test(textOf(c)); })) continue;
+      if (qsa('div, span, i', el).some(function (c) { return RATING_RE.test(textOf(c)); })) continue;
       best = el; // deepest match wins
     }
     if (best) { var v = parseRating(textOf(best)); if (!isNaN(v)) return v; }
-
     return NaN;
   }
 
   function flipkartCount(card) {
-    // Current layout (2024+): <span class="PvbNMB">26,324 Ratings & 1,912 Reviews</span>.
-    var slot = card.querySelector('.PvbNMB');
-    if (slot) {
-      var sv = countFromText(textOf(slot));
+    // Current layout (2024+): the count lives in a dedicated span
+    // (.PvbNMB) as "26,324 Ratings & 1,912 Reviews".  Query it directly
+    // — parsing the concatenated a7saXW text is unreliable because the
+    // rating and count digits merge without a separator.
+    var pvb = card.querySelector('.PvbNMB');
+    if (pvb) {
+      var sv = countFromText(textOf(pvb));
       if (!isNaN(sv) && sv > 0) return sv;
     }
 
-    var txt = (card.innerText || '').replace(/\u00a0/g, ' ');
-    var m = txt.match(/([\d,]+)\s*Ratings?\b/i) ||
-            txt.match(/Ratings?\s*([\d,]+)\b/i);
-    if (m) { var v = parseCount(m[1]); if (!isNaN(v)) return v; }
-
-    // Older layout: "4.3" badge followed by a separate "(1,234)" span.
-    // Scoped to small standalone spans/divs only — never the whole card text,
-    // so spec lines like "Apple One (1) Year Limited Warranty" can't match.
+    // Older layout fallback: a standalone node like "(26,324)" or
+    // "26,324 Ratings".
     var nodes = qsa('span, div', card);
     for (var i = 0; i < nodes.length; i++) {
       var t = textOf(nodes[i]);
-      if (!/^\(?[\d,]+\)?$/.test(t)) continue;
-      var v3 = parseCount(t.replace(/[()]/g, ''));
+      if (t.length > 20) continue;
+      if (/\brating/i.test(t)) { var sv2 = countFromText(t); if (!isNaN(sv2) && sv2 > 0) return sv2; }
+    }
+
+    // Legacy standalone tokens like "(1,234)".
+    for (var k = 0; k < nodes.length; k++) {
+      var t2 = textOf(nodes[k]);
+      if (t2.length > 16) continue;
+      if (!/^\(?[\d,]+\)?$/.test(t2)) continue;
+      var v3 = parseCount(t2.replace(/[()]/g, ''));
       if (!isNaN(v3) && v3 > 0) return v3;
     }
     return NaN;
