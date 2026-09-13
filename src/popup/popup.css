@@ -1,0 +1,116 @@
+:root {
+  color-scheme: light dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 296px;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #111827;
+  background: #ffffff;
+}
+
+.wrap { padding: 14px; }
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.status {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.status.ok { background: #ecfdf5; color: #047857; }
+.status.warn { background: #fffbeb; color: #b45309; }
+
+.field {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+}
+
+select:disabled { opacity: 0.55; }
+
+button#rescan {
+  width: 100%;
+  height: 34px;
+  margin: 8px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button#rescan:hover:not(:disabled) { background: #1d4ed8; }
+button#rescan:disabled { background: #c7d2fe; cursor: default; }
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: #374151;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.check input { margin: 1px 0 0; }
+.check input:disabled + span { opacity: 0.55; }
+
+.hint {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  body { background: #1f2937; color: #f9fafb; }
+  .head h1 { color: #f9fafb; }
+  .status { background: #374151; color: #d1d5db; }
+  .status.ok { background: #064e3b; color: #6ee7b7; }
+  .status.warn { background: #78350f; color: #fcd34d; }
+  .field { color: #d1d5db; }
+  select { background: #111827; color: #f9fafb; border-color: #4b5563; }
+  .check { color: #d1d5db; }
+  .hint { color: #9ca3af; border-top-color: #374151; }
+}

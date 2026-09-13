@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sort by Rating</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="head">
+      <img src="../icons/icon-48.png" alt="" width="24" height="24">
+      <h1>Sort by Rating</h1>
+    </header>
+
+    <div id="status" class="status">Checking this page…</div>
+
+    <label class="field" for="mode">Sort products by</label>
+    <select id="mode" disabled>
+      <option value="reviews-desc">Most rated (number of reviews)</option>
+      <option value="rating-desc">Highest rating</option>
+      <option value="rating-asc">Lowest rating</option>
+      <option value="reviews-asc">Fewest reviews</option>
+      <option value="default">Default order</option>
+    </select>
+
+    <button id="rescan" type="button" disabled>Re-apply to this page</button>
+
+    <label class="check">
+      <input type="checkbox" id="auto" disabled>
+      <span>Sort automatically when a page loads</span>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" id="bar" disabled>
+      <span>Show the quick sort bar on the page</span>
+    </label>
+
+    <p class="hint">
+      Works on Amazon search / category / best-seller pages and on Flipkart
+      search and category pages. Products with no ratings are kept at the bottom.
+    </p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

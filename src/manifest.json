@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Sort by Rating — Amazon & Flipkart",
+  "version": "1.0.0",
+  "description": "Sort Amazon and Flipkart results by number of ratings/reviews or by star rating, instead of the site's default order.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "Sort by Rating",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.com/*",
+        "*://*.amazon.in/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.de/*",
+        "*://*.amazon.fr/*",
+        "*://*.amazon.it/*",
+        "*://*.amazon.es/*",
+        "*://*.amazon.ca/*",
+        "*://*.amazon.com.au/*",
+        "*://*.amazon.com.br/*",
+        "*://*.amazon.com.mx/*",
+        "*://*.amazon.co.jp/*",
+        "*://*.amazon.nl/*",
+        "*://*.amazon.se/*",
+        "*://*.amazon.pl/*",
+        "*://*.amazon.sg/*",
+        "*://*.amazon.ae/*",
+        "*://*.amazon.sa/*",
+        "*://*.amazon.com.tr/*",
+        "*://*.amazon.eg/*",
+        "*://*.amazon.com.be/*",
+        "*://*.flipkart.com/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

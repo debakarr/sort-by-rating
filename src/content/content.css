@@ -1,0 +1,100 @@
+/* Quick sort bar injected into Amazon / Flipkart pages. */
+#sbr-bar {
+  position: fixed !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+  padding: 8px 10px 8px 14px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: #111827 !important;
+  color: #f9fafb !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.28) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  opacity: 0.96;
+  transition: opacity 0.15s ease;
+}
+
+#sbr-bar:hover { opacity: 1; }
+
+#sbr-bar .sbr-label {
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  color: #9ca3af !important;
+  text-transform: uppercase !important;
+  font-size: 11px !important;
+}
+
+#sbr-bar select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  box-sizing: border-box !important;
+  height: 28px !important;
+  padding: 0 26px 0 10px !important;
+  margin: 0 !important;
+  border: 1px solid #374151 !important;
+  border-radius: 999px !important;
+  background-color: #1f2937 !important;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%239ca3af' d='M0 0h10L5 6z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 9px center !important;
+  color: #f9fafb !important;
+  font: inherit !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+}
+
+#sbr-bar select:focus-visible {
+  outline: 2px solid #60a5fa !important;
+  outline-offset: 1px !important;
+}
+
+#sbr-bar button#sbr-close {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: #9ca3af !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+}
+
+#sbr-bar button#sbr-close:hover {
+  background: #374151 !important;
+  color: #ffffff !important;
+}
+
+/* Phones and other small screens: keep the bar compact and clear of notches. */
+@media (max-width: 600px) {
+  #sbr-bar {
+    right: 8px !important;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 6px !important;
+    padding: 6px 6px 6px 10px !important;
+    font-size: 12px !important;
+  }
+
+  #sbr-bar .sbr-label {
+    display: none !important;
+  }
+
+  #sbr-bar select {
+    height: 26px !important;
+    font-size: 12px !important;
+    max-width: 46vw !important;
+  }
+}
+
